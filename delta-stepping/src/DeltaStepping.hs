@@ -28,7 +28,7 @@ import Data.Bits
 import Data.Graph.Inductive                                         ( Gr )
 import Data.IORef
 import Data.IntMap.Strict                                           ( IntMap )
-import Data.IntSet                                                  ( IntSet, null, toAscList)
+import Data.IntSet                                                  ( IntSet)
 import Data.Vector.Storable                                         ( Vector )
 import Data.Word
 import Foreign.Ptr
@@ -36,7 +36,7 @@ import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set (empty)
+import qualified Data.IntSet                                        as Set (empty, null, toAscList)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
@@ -146,7 +146,7 @@ step verbose threadCount graph delta buckets distances = do
 --
 allBucketsEmpty :: Buckets -> IO Bool
 allBucketsEmpty (Buckets _ buckets) = do
-  return $ foldl (\x y -> x || Data.IntSet.null y) False buckets
+  return $ foldl (\x y -> x || Set.null y) False buckets
 
 -- Return the index of the smallest on-empty boucket. Assumes that there is at
 -- least one non-empty bucket remaining.
@@ -310,7 +310,7 @@ printBucket
 printBucket graph bucket distances = do
   printf "  Node  |  Label  |  Distance\n"
   printf "--------+---------+-----------\n"
-  forM_ (Data.IntSet.toAscList bucket) $ \v -> do
+  forM_ (Set.toAscList bucket) $ \v -> do
     let ml = G.lab graph v
     x <- M.read distances v
     case ml of
