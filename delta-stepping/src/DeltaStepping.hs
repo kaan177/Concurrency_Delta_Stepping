@@ -107,7 +107,7 @@ initialise graph delta source = do
   bucketIndex <- newIORef 0
   arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
-  distances <- M.replicate (length(G.nodes graph)) infinity
+  distances <- M.replicate (length (G.nodes graph)) infinity
   return (buckets, distances)
 
 
@@ -146,15 +146,15 @@ step verbose threadCount graph delta buckets distances = do
 --
 allBucketsEmpty :: Buckets -> IO Bool
 allBucketsEmpty (Buckets _ buckets) = do
-  return $ foldl (\x y -> x || Set.null y) False buckets
+  V.foldl (\x y -> x || Set.null y) False buckets
 
 -- Return the index of the smallest on-empty boucket. Assumes that there is at
 -- least one non-empty bucket remaining.
 --
 findNextBucket :: Buckets -> IO Int
 findNextBucket (Buckets currentPos buckets) = do
-  
-  
+
+
   undefined
 
 
