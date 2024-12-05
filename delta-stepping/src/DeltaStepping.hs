@@ -36,7 +36,7 @@ import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set
+import qualified Data.IntSet                                        as Set (empty)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
@@ -132,9 +132,8 @@ step verbose threadCount graph delta buckets distances = do
 -- algorithm terminates.
 --
 allBucketsEmpty :: Buckets -> IO Bool
-allBucketsEmpty buckets = do
-  undefined
-
+allBucketsEmpty (Buckets _ buckets) = do
+  return $ foldl (\x y -> x || y == Set.empty) False buckets
 
 -- Return the index of the smallest on-empty bucket. Assumes that there is at
 -- least one non-empty bucket remaining.
