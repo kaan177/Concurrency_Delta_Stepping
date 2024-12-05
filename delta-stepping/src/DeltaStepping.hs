@@ -40,6 +40,7 @@ import qualified Data.IntSet                                        as Set (empt
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
+import Data.Fixed (mod', div')
 
 
 type Graph    = Gr String Distance  -- Graphs have nodes labelled with Strings and edges labelled with their distance
@@ -103,7 +104,19 @@ initialise
     -> Node
     -> IO (Buckets, TentativeDistances)
 initialise graph delta source = do
-  undefined
+  bucketIndex <- newIORef 0
+  arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
+  let buckets = Buckets bucketIndex arrayOfBuckets
+  distances <- M.replicate (length(G.nodes graph)) infinity
+  return (buckets, distances)
+
+
+amountOfBuckets :: [G.LEdge Float] -> Float -> Int
+amountOfBuckets edges delta = ceiling (findLargestEdge edges / delta)
+
+findLargestEdge :: [G.LEdge Float] -> Float
+findLargestEdge [] = 0
+findLargestEdge ((_, _, x) : xs) = max x (findLargestEdge xs)
 
 
 -- Take a single step of the algorithm.
