@@ -196,11 +196,11 @@ relax buckets distances delta (node, newDistance) = do
   distance <- M.read distances node
   when (newDistance < distance) $ do
     let a = bucketArray buckets
-    -- not sure how to calculate wich buckets should be updated
-
     
-    -- V.modify a (Set.delete node) (distance/delta)
-    -- V.modify a (Set.insert node) (distance/delta)
+    -- not sure if these are rounded correctly
+    -- not sure how this would work with cyclic buckets
+    V.modify a (Set.delete node) (floor (distance / delta))
+    V.modify a (Set.insert node) (floor (distance / delta))
 
     M.write distances node newDistance
   -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
