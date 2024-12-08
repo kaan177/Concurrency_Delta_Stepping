@@ -193,7 +193,15 @@ relax :: Buckets
       -> (Node, Distance) -- (w, x) in the paper
       -> IO ()
 relax buckets distances delta (node, newDistance) = do
-  undefined
+  distance <- M.read distances node
+  when (newDistance < distance) $ do
+    let a = bucketArray buckets
+    -- remove this node out of the correct bucket
+    -- then put it in the correct bucket
+    M.write distances node newDistance
+  
+  -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
+
 
 
 -- -----------------------------------------------------------------------------
