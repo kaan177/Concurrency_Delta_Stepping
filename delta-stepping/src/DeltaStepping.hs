@@ -36,7 +36,7 @@ import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter)
+import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
@@ -140,19 +140,23 @@ step verbose threadCount graph delta buckets distances = do
   -- in the inner loop.
   nextBucket <- findNextBucket buckets
   writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
-  let r = Set.empty                                                      --empty set of nodes
+  r <- newIORef Set.empty                                                      --empty set of nodes
   let                                                                   -- WHILE LOOP 2
     loop2 = do
       done <- currentBucketIsEmpty buckets  --while bucket is not empty
       if done
       then return ()
       else do
-        requests <- findRequests threadCount (isLightEdge delta) graph r distances       --find light requests
+        set <- getCurrentBucket buckets
+        requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
+        oldRValue <- readIORef r
+        writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
         loop2
   loop2                                                                   -- END WHILE LOOP 1
-  requests <- findRequests threadCount (isLightEdge delta) graph r distances       -- find heavy requests
+  rValue <- readIORef r
+  requests <- findRequests threadCount (isLightEdge delta) graph rValue distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
 
 
@@ -164,12 +168,16 @@ isHeavyEdge delta distance = distance > delta
 
 
 currentBucketIsEmpty :: Buckets -> IO Bool
-currentBucketIsEmpty (Buckets firstBucket bucketArray) = do
+currentBucketIsEmpty b@(Buckets firstBucket bucketArray) = do
+  set <- getCurrentBucket b
+  return (Set.null set)
+
+getCurrentBucket :: Buckets -> IO IntSet
+getCurrentBucket (Buckets firstBucket bucketArray) = do
   index <- readIORef firstBucket
   let bucketCount = V.length bucketArray
   let indexModulated = mod index bucketCount
-  set <- V.read bucketArray indexModulated
-  return (Set.null set)
+  V.read bucketArray indexModulated
 
 emptyCurrentBucket :: Buckets -> IO()
 emptyCurrentBucket (Buckets firstBucket bucketArray) = do
