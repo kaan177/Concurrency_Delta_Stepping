@@ -210,7 +210,7 @@ findRequests threadCount p graph v' distances = do
     filterFun node = do
       yay <- M.read distances node
       return ()
-]
+
 
 -- Execute requests for each of the given (node, distance) pairs
 --
