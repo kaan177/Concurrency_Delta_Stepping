@@ -205,7 +205,9 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
+  -- first get the edges of all the nodes that are in the bucket
   let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
+  -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
   return $ Map.fromList listForIntMap
 
