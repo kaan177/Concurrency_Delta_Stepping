@@ -36,7 +36,7 @@ import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert)
+import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
@@ -200,6 +200,7 @@ findRequests threadCount p graph v' distances = do
   undefined       --empty the bucket
 
 
+
 -- Execute requests for each of the given (node, distance) pairs
 --
 relaxRequests
@@ -210,7 +211,9 @@ relaxRequests
     -> IntMap Distance
     -> IO ()
 relaxRequests threadCount buckets distances delta req = do
-  undefined
+  let doRelax = relax buckets distances delta
+  let _ = Map.mapWithKey (curry doRelax) req
+  return ()
 
 
 -- Execute a single relaxation, moving the given node to the appropriate bucket
@@ -225,7 +228,7 @@ relax buckets distances delta (node, newDistance) = do
   distance <- M.read distances node
   when (newDistance < distance) $ do
     let a = bucketArray buckets
-    
+
     -- not sure if these are rounded correctly
     -- not sure how this would work with cyclic buckets
     V.modify a (Set.delete node) (floor (distance / delta))
