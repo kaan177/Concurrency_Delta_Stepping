@@ -29,14 +29,14 @@ import Data.Graph.Inductive                                         ( Gr )
 import Data.IORef
 import Data.IntMap.Strict                                           ( IntMap )
 import Data.IntSet                                                  ( IntSet)
-import Data.Vector.Storable                                         ( Vector )
+import Data.Vector.Storable                                         ( Vector, fromList )
 import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union)
+import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union, toList)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
@@ -213,19 +213,19 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
-  -- get neighbours from graph
-  -- check if these neighbours are heavy or light
-  -- if yes
-  -- add to a list of shit
-  -- return the list
+  -- first get the edges of all the nodes that are in the bucket
+  let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
+  -- then create the intmap with the new node as key and a distance as value
+  listForIntMap <- mapM (calculateNewRequestDistance distances) edges
+  return $ Map.fromList listForIntMap
 
+calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
+calculateNewRequestDistance distances (node1, node2, distance) = do
+  tentDistance <- M.read distances node1
+  return (node2, distance + tentDistance)
 
-  let yay = Set.filter (\x -> True) {-distance between node x and -} v'
-  undefined
-  where
-    filterFun node = do
-      yay <- M.read distances node
-      return ()
+findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
+findRequests' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
 
 
 -- Execute requests for each of the given (node, distance) pairs
