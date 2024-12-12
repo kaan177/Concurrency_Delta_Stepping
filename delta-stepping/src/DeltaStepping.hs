@@ -147,19 +147,20 @@ step verbose threadCount graph delta buckets distances = do
       if done
       then return ()
       else do
-        requests <- findRequests threadCount isLightEdge graph r distances       --find light requests
-        relaxRequests threadCount buckets distances delta requests       --handle all the requests /put back items in the bucket
+        requests <- findRequests threadCount (isLightEdge delta) graph r distances       --find light requests
+        emptyCurrentBucket buckets                                               --empty current bucket
+        relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
         loop2
   loop2                                                                   -- END WHILE LOOP 1
-  requests <- findRequests threadCount isLightEdge graph r distances       -- find heavy requests
+  requests <- findRequests threadCount (isLightEdge delta) graph r distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
 
 
-isLightEdge :: (Distance -> Bool)
-isLightEdge = undefined
+isLightEdge ::Distance -> (Distance -> Bool)
+isLightEdge delta distance = distance <= delta
 
-isHeavyEdge :: (Distance -> Bool)
-isHeavyEdge = undefined
+isHeavyEdge ::Distance -> (Distance -> Bool)
+isHeavyEdge delta distance = distance > delta
 
 
 currentBucketIsEmpty :: Buckets -> IO Bool
@@ -169,6 +170,13 @@ currentBucketIsEmpty (Buckets firstBucket bucketArray) = do
   let indexModulated = mod index bucketCount
   set <- V.read bucketArray indexModulated
   return (Set.null set)
+
+emptyCurrentBucket :: Buckets -> IO()
+emptyCurrentBucket (Buckets firstBucket bucketArray) = do
+  index <- readIORef firstBucket
+  let bucketCount = V.length bucketArray
+  let indexModulated = mod index bucketCount
+  V.write bucketArray indexModulated Set.empty
 
 -- Once all buckets are empty, the tentative distances are finalised and the
 -- algorithm terminates.
