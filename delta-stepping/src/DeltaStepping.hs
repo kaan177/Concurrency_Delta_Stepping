@@ -205,8 +205,19 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
-  undefined       --empty the bucket
+  -- get neighbours from graph
+  -- check if these neighbours are heavy or light
+  -- if yes
+  -- add to a list of shit
+  -- return the list
 
+
+  let yay = Set.filter (\x -> True) {-distance between node x and -} v'
+  undefined
+  where
+    filterFun node = do
+      yay <- M.read distances node
+      return ()
 
 
 -- Execute requests for each of the given (node, distance) pairs
