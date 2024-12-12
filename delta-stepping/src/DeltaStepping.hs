@@ -138,8 +138,37 @@ step verbose threadCount graph delta buckets distances = do
   -- For debugging purposes, you may want to place:
   --   printVerbose verbose "inner step" graph delta buckets distances
   -- in the inner loop.
-  undefined
+  nextBucket <- findNextBucket buckets
+  writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
+  let r = Set.empty                                                      --empty set of nodes
+  let                                                                   -- WHILE LOOP 2
+    loop2 = do
+      done <- currentBucketIsEmpty buckets  --while bucket is not empty
+      if done
+      then return ()
+      else do
+        requests <- findRequests threadCount isLightEdge graph r distances       --find light requests
+        relaxRequests threadCount buckets distances delta requests       --handle all the requests /put back items in the bucket
+        loop2
+  loop2                                                                   -- END WHILE LOOP 1
+  requests <- findRequests threadCount isLightEdge graph r distances       -- find heavy requests
+  relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
 
+
+isLightEdge :: (Distance -> Bool)
+isLightEdge = undefined
+
+isHeavyEdge :: (Distance -> Bool)
+isHeavyEdge = undefined
+
+
+currentBucketIsEmpty :: Buckets -> IO Bool
+currentBucketIsEmpty (Buckets firstBucket bucketArray) = do
+  index <- readIORef firstBucket
+  let bucketCount = V.length bucketArray
+  let indexModulated = mod index bucketCount
+  set <- V.read bucketArray indexModulated
+  return (Set.null set)
 
 -- Once all buckets are empty, the tentative distances are finalised and the
 -- algorithm terminates.
@@ -168,7 +197,7 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
-  undefined
+  undefined       --empty the bucket
 
 
 -- Execute requests for each of the given (node, distance) pairs
