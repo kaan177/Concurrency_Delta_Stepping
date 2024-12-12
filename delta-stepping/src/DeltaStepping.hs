@@ -36,7 +36,7 @@ import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map)
+import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, filter)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
@@ -168,11 +168,19 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
+  -- get neighbours from graph
+  -- check if these neighbours are heavy or light
+  -- if yes
+  -- add to a list of shit
+  -- return the list
 
 
+  let yay = Set.filter (\x -> True) {-distance between node x and -} v'
   undefined
-
-
+  where
+    filterFun node = do
+      yay <- M.read distances node
+      return ()
 
 -- Execute requests for each of the given (node, distance) pairs
 --
