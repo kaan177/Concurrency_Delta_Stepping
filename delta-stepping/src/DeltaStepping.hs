@@ -149,13 +149,13 @@ step verbose threadCount graph delta buckets distances = do
       if done
       then return ()
       else do
+        printVerbose verbose "inner step" graph delta buckets distances
         set <- getCurrentBucket buckets
         requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
         oldRValue <- readIORef r
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
-        printVerbose verbose "inner step" graph delta buckets distances
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
@@ -194,7 +194,7 @@ emptyCurrentBucket (Buckets firstBucket bucketArray) = do
 --
 allBucketsEmpty :: Buckets -> IO Bool
 allBucketsEmpty (Buckets _ buckets) = do
-  V.foldl (\x y -> x || Set.null y) False buckets
+  V.foldl (\x y -> x && Set.null y) True buckets
 
 -- Return the index of the smallest on-empty boucket. Assumes that there is at
 -- least one non-empty bucket remaining.
