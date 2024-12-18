@@ -170,7 +170,7 @@ isHeavyEdge delta distance = distance > delta
 
 
 currentBucketIsEmpty :: Buckets -> IO Bool
-currentBucketIsEmpty b@(Buckets firstBucket bucketArray) = do
+currentBucketIsEmpty b = do
   set <- getCurrentBucket b
   return (Set.null set)
 
