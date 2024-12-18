@@ -35,13 +35,15 @@ import Foreign.Ptr
 import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
-import qualified Data.IntMap.Strict                                 as Map 
+import qualified Data.IntMap.Strict                                 as Map
 import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union, toList)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
 import Data.Fixed (mod', div')
 import Data.Maybe
+import Data.Ord (comparing)
+import Data.List
 
 
 type Graph    = Gr String Distance  -- Graphs have nodes labelled with Strings and edges labelled with their distance
@@ -77,8 +79,6 @@ deltaStepping verbose graph delta source = do
     -- The algorithm loops while there are still non-empty buckets
     loop = do
       done <- allBucketsEmpty buckets
-      print "loop is done check"
-      print done
       if done
       then return ()
       else do
@@ -106,7 +106,7 @@ initialise
     -> Node
     -> IO (Buckets, TentativeDistances)
 initialise graph delta source = do
-  print "-------------------------------------------THIS IS A NEW GRAPH---------------------------------------------------------"
+  -- print "-------------------------------------------THIS IS A NEW GRAPH---------------------------------------------------------"
   bucketIndex <- newIORef 0
   arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
@@ -152,11 +152,7 @@ step verbose threadCount graph delta buckets distances = do
       else do
         printVerbose verbose "inner step" graph delta buckets distances
         set <- getCurrentBucket buckets
-        print "light request"
-        -- 
         requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
-        print "requests"
-        print requests
         oldRValue <- readIORef r
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
@@ -164,7 +160,6 @@ step verbose threadCount graph delta buckets distances = do
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
-  print "heavy request"
   requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
   writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
@@ -201,10 +196,7 @@ emptyCurrentBucket (Buckets firstBucket bucketArray) = do
 --
 allBucketsEmpty :: Buckets -> IO Bool
 allBucketsEmpty (Buckets _ buckets) = do
-  print "checks buckets"
-  isEmpty <- V.foldl (\x y -> x && Set.null y) True buckets
-  print isEmpty
-  return isEmpty
+  V.foldl (\x y -> x && Set.null y) True buckets
 
 -- Return the index of the smallest on-empty boucket. Assumes that there is at
 -- least one non-empty bucket remaining.
@@ -228,20 +220,18 @@ findRequests
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
   -- first get the edges of all the nodes that are in the bucket
-  
+
   let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
-  print "EDGES"
-  print edges
   -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
-  return $ Map.fromList listForIntMap
+  return $ foldl' (\intMap (key, val) -> Map.insertWith min key val intMap) Map.empty listForIntMap
+  -- return $ Map.fromList (sortBy (comparing snd) listForIntMap)
+
+
 
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
 calculateNewRequestDistance distances (node1, node2, distance) = do
   tentDistance <- M.read distances node1
-  print "tentativeDistance"
-  print tentDistance
-  print distance
   return (node2, distance + tentDistance)
 
 findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
@@ -258,11 +248,7 @@ relaxRequests
     -> IO ()
 relaxRequests threadCount buckets distances delta req = do
   let doRelax = relax buckets distances delta
-  let yay = Map.toList req
-  mapM_ doRelax yay
-
-  print "end relax requests"
-  return ()
+  mapM_ doRelax (Map.toList req)
 
 
 -- Execute a single relaxation, moving the given node to the appropriate bucket
