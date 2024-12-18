@@ -41,6 +41,7 @@ import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
 import Data.Fixed (mod', div')
+import Data.Maybe
 
 
 type Graph    = Gr String Distance  -- Graphs have nodes labelled with Strings and edges labelled with their distance
@@ -257,14 +258,18 @@ relax :: Buckets
 relax buckets distances delta (node, newDistance) = do
   distance <- M.read distances node
   when (newDistance < distance) $ do
-    let a = bucketArray buckets
+    let bucketArray' = bucketArray buckets
 
     -- not sure if these are rounded correctly
     -- not sure how this would work with cyclic buckets
-    V.modify a (Set.delete node) (floor (distance / delta))
-    V.modify a (Set.insert node) (floor (distance / delta))
 
+    bucketToRemoveFrom <- V.readMaybe bucketArray' (floor (distance / delta))
+    when (isJust bucketToRemoveFrom) $ do
+      V.modify bucketArray' (Set.delete node) (floor (distance / delta))
+
+    V.modify bucketArray' (Set.insert node) (floor (newDistance / delta))
     M.write distances node newDistance
+
   -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
 
 
