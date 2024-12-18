@@ -141,7 +141,6 @@ step verbose threadCount graph delta buckets distances = do
   -- in the inner loop.
   nextBucket <- findNextBucket buckets
   r <- newIORef Set.empty                                                      --empty set of nodes
-  print "before loop"
   let                                                                   -- WHILE LOOP 2
     loop2 = do
       done <- currentBucketIsEmpty buckets  --while bucket is not empty
@@ -253,8 +252,6 @@ relaxRequests
     -> IO ()
 relaxRequests threadCount buckets distances delta req = do
   let doRelax = relax buckets distances delta
-  print "requests inside relaxrequests"
-  print req
   let yay = Map.toList req
   mapM_ doRelax yay
 
