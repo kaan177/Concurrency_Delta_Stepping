@@ -35,7 +35,7 @@ import Foreign.Ptr
 import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
-import qualified Data.IntMap.Strict                                 as Map
+import qualified Data.IntMap.Strict                                 as Map 
 import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union, toList)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
@@ -151,6 +151,7 @@ step verbose threadCount graph delta buckets distances = do
         printVerbose verbose "inner step" graph delta buckets distances
         set <- getCurrentBucket buckets
         print "light request"
+        -- 
         requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
         print "requests"
         print requests
@@ -160,7 +161,6 @@ step verbose threadCount graph delta buckets distances = do
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
 
         printVerbose verbose "end of inner step" graph delta buckets distances
-
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
@@ -168,7 +168,6 @@ step verbose threadCount graph delta buckets distances = do
   requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
   writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
-
 
 
 isLightEdge ::Distance -> (Distance -> Bool)
@@ -187,11 +186,7 @@ getCurrentBucket :: Buckets -> IO IntSet
 getCurrentBucket (Buckets firstBucket bucketArray) = do
   index <- readIORef firstBucket
   let bucketCount = V.length bucketArray
-  print "bucketCount"
-  print bucketCount
   let indexModulated = mod index bucketCount
-  print "index"
-  print indexModulated
   V.read bucketArray indexModulated
 
 emptyCurrentBucket :: Buckets -> IO()
@@ -236,12 +231,14 @@ findRequests threadCount p graph v' distances = do
   print edges
   -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
-  print listForIntMap
   return $ Map.fromList listForIntMap
 
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
 calculateNewRequestDistance distances (node1, node2, distance) = do
   tentDistance <- M.read distances node1
+  print "tentativeDistance"
+  print tentDistance
+  print distance
   return (node2, distance + tentDistance)
 
 findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
@@ -258,9 +255,11 @@ relaxRequests
     -> IO ()
 relaxRequests threadCount buckets distances delta req = do
   let doRelax = relax buckets distances delta
-  print "requests"
+  print "requests inside relaxrequests"
   print req
-  let _ = void $ Map.mapWithKey (curry doRelax) req
+  let yay = Map.toList req
+  mapM_ doRelax yay
+
   print "end relax requests"
   return ()
 
@@ -274,6 +273,7 @@ relax :: Buckets
       -> (Node, Distance) -- (w, x) in the paper
       -> IO ()
 relax buckets distances delta (node, newDistance) = do
+  print "start relax"
   distance <- M.read distances node
   print "relax distance"
   print distance
