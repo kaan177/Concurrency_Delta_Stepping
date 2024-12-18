@@ -159,8 +159,6 @@ step verbose threadCount graph delta buckets distances = do
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
-
-        printVerbose verbose "end of inner step" graph delta buckets distances
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
@@ -273,26 +271,23 @@ relax :: Buckets
       -> (Node, Distance) -- (w, x) in the paper
       -> IO ()
 relax buckets distances delta (node, newDistance) = do
-  print "start relax"
+  -- print "start relax"
   distance <- M.read distances node
-  print "relax distance"
-  print distance
+  -- print "relax distance"
+  -- print distance
   when (newDistance < distance) $ do
     let bucketArray' = bucketArray buckets
 
     -- not sure if these are rounded correctly
     -- not sure how this would work with cyclic buckets
 
-    print "start relax"
     bucketToRemoveFrom <- V.readMaybe bucketArray' (floor (distance / delta))
     when (isJust bucketToRemoveFrom) $ do
       V.modify bucketArray' (Set.delete node) (floor (distance / delta))
 
     V.modify bucketArray' (Set.insert node) (floor (newDistance / delta))
-    print node
-    print newDistance
     M.write distances node newDistance
-    print "end relax"
+    -- print "end relax"
 
   -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
 
