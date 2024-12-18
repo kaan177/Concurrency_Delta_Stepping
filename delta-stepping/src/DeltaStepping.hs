@@ -77,6 +77,8 @@ deltaStepping verbose graph delta source = do
     -- The algorithm loops while there are still non-empty buckets
     loop = do
       done <- allBucketsEmpty buckets
+      print "loop is done check"
+      print done
       if done
       then return ()
       else do
@@ -199,7 +201,10 @@ emptyCurrentBucket (Buckets firstBucket bucketArray) = do
 --
 allBucketsEmpty :: Buckets -> IO Bool
 allBucketsEmpty (Buckets _ buckets) = do
-  V.foldl (\x y -> x && Set.null y) True buckets
+  print "checks buckets"
+  isEmpty <- V.foldl (\x y -> x && Set.null y) True buckets
+  print isEmpty
+  return isEmpty
 
 -- Return the index of the smallest on-empty boucket. Assumes that there is at
 -- least one non-empty bucket remaining.
@@ -275,15 +280,17 @@ relax buckets distances delta (node, newDistance) = do
   -- print distance
   when (newDistance < distance) $ do
     let bucketArray' = bucketArray buckets
+    let bucketCount = V.length bucketArray'
+    let indexModulated = mod (floor (newDistance / delta)) bucketCount
 
     -- not sure if these are rounded correctly
     -- not sure how this would work with cyclic buckets
 
-    bucketToRemoveFrom <- V.readMaybe bucketArray' (floor (distance / delta))
+    bucketToRemoveFrom <- V.readMaybe bucketArray' indexModulated
     when (isJust bucketToRemoveFrom) $ do
-      V.modify bucketArray' (Set.delete node) (floor (distance / delta))
+      V.modify bucketArray' (Set.delete node) indexModulated
 
-    V.modify bucketArray' (Set.insert node) (floor (newDistance / delta))
+    V.modify bucketArray' (Set.insert node) indexModulated
     M.write distances node newDistance
     -- print "end relax"
 
