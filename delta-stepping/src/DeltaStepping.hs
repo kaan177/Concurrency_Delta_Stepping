@@ -219,6 +219,8 @@ findRequests
 findRequests threadCount p graph v' distances = do
   -- first get the edges of all the nodes that are in the bucket
   let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
+  print "EDGES"
+  print edges
   -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
   return $ Map.fromList listForIntMap
@@ -230,7 +232,6 @@ calculateNewRequestDistance distances (node1, node2, distance) = do
 
 findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
 findRequests' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
-
 
 -- Execute requests for each of the given (node, distance) pairs
 --
