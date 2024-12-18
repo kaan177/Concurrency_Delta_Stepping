@@ -108,6 +108,7 @@ initialise graph delta source = do
   arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
   distances <- M.replicate (length (G.nodes graph)) infinity
+  relax buckets distances delta (source, 0)
   return (buckets, distances)
 
 
@@ -153,10 +154,11 @@ step verbose threadCount graph delta buckets distances = do
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
+        printVerbose verbose "inner step" graph delta buckets distances
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
-  requests <- findRequests threadCount (isLightEdge delta) graph rValue distances       -- find heavy requests
+  requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
 
 
@@ -198,9 +200,10 @@ allBucketsEmpty (Buckets _ buckets) = do
 --
 findNextBucket :: Buckets -> IO Int
 findNextBucket (Buckets currentPos buckets) = do
-  
-
-  undefined
+  let totalBuckets = V.length buckets
+  currentBucketPos <- readIORef currentPos
+  let nextBucket = (currentBucketPos + 1) `mod` totalBuckets
+  return nextBucket
 
 
 -- Create requests of (node, distance) pairs that fulfil the given predicate
