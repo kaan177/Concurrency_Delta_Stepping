@@ -72,7 +72,6 @@ deltaStepping verbose graph delta source = do
 
   -- Initialise the algorithm
   (buckets, distances)  <- initialise graph delta source
-  printVerbose verbose "initialse" graph delta buckets distances
 
   let
     -- The algorithm loops while there are still non-empty buckets
@@ -237,6 +236,7 @@ findRequests threadCount p graph v' distances = do
   print edges
   -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
+  print listForIntMap
   return $ Map.fromList listForIntMap
 
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
