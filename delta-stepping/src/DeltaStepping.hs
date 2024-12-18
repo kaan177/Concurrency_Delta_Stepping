@@ -141,8 +141,8 @@ step verbose threadCount graph delta buckets distances = do
   --   printVerbose verbose "inner step" graph delta buckets distances
   -- in the inner loop.
   nextBucket <- findNextBucket buckets
-  writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
   r <- newIORef Set.empty                                                      --empty set of nodes
+  print "before loop"
   let                                                                   -- WHILE LOOP 2
     loop2 = do
       done <- currentBucketIsEmpty buckets  --while bucket is not empty
@@ -151,16 +151,24 @@ step verbose threadCount graph delta buckets distances = do
       else do
         printVerbose verbose "inner step" graph delta buckets distances
         set <- getCurrentBucket buckets
+        print "light request"
         requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
+        print requests
         oldRValue <- readIORef r
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
+        print "end of inner step"
+        printVerbose verbose "end of inner step" graph delta buckets distances
+
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
+  print "heavy request"
   requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
+  writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
+
 
 
 isLightEdge ::Distance -> (Distance -> Bool)
@@ -179,7 +187,11 @@ getCurrentBucket :: Buckets -> IO IntSet
 getCurrentBucket (Buckets firstBucket bucketArray) = do
   index <- readIORef firstBucket
   let bucketCount = V.length bucketArray
+  print "bucketCount"
+  print bucketCount
   let indexModulated = mod index bucketCount
+  print "index"
+  print indexModulated
   V.read bucketArray indexModulated
 
 emptyCurrentBucket :: Buckets -> IO()
@@ -218,6 +230,7 @@ findRequests
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
   -- first get the edges of all the nodes that are in the bucket
+  
   let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
   print "EDGES"
   print edges
