@@ -254,12 +254,26 @@ relaxRequests
 relaxRequests threadCount buckets distances delta req = do
   let doRelax = relax buckets distances delta
   let yay = Map.toList req
-  mapM_ doRelax yay
+
+  forkThreads threadCount (doConcurrentRelax threadCount doRelax yay)
 
   print "end relax requests"
   return ()
 
+doConcurrentRelax ::  Int -> ((Node, Distance) -> IO ()) -> [(Node, Distance)] -> Int -> IO ()
+doConcurrentRelax threadCount relaxFunction list threadIndex = do
+  let listLength = length list
+  let dropAmount = rangeCalculater listLength threadCount threadIndex
+  let takeAmount = (rangeCalculater listLength threadCount threadIndex) - dropAmount
+  let newList = take takeAmount (drop dropAmount list)
+  mapM_ relaxFunction newList
 
+
+rangeCalculater :: Int -> Int -> Int -> Int
+rangeCalculater _ _ 0 = 0
+rangeCalculater upper threadCount index = div upper threadCount + rangeCalculater upper threadCount (index - 1) + f where
+  f | mod upper threadCount >= index = 1
+    | otherwise = 0
 -- Execute a single relaxation, moving the given node to the appropriate bucket
 -- as necessary
 --
