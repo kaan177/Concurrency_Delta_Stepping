@@ -35,7 +35,7 @@ import Foreign.Ptr
 import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
-import qualified Data.IntMap.Strict                                 as Map 
+import qualified Data.IntMap.Strict                                 as Map
 import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union, toList)
 import qualified Data.Vector.Mutable                                as V
 import qualified Data.Vector.Storable                               as M ( unsafeFreeze, empty )
@@ -107,7 +107,7 @@ initialise
     -> Node
     -> IO (Buckets, TentativeDistances)
 initialise graph delta source = do
-  print "-------------------------------------------THIS IS A NEW GRAPH---------------------------------------------------------"
+  -- print "-------------------------------------------THIS IS A NEW GRAPH---------------------------------------------------------"
   bucketIndex <- newIORef 0
   arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
@@ -153,11 +153,7 @@ step verbose threadCount graph delta buckets distances = do
       else do
         printVerbose verbose "inner step" graph delta buckets distances
         set <- getCurrentBucket buckets
-        print "light request"
-        -- 
         requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
-        print "requests"
-        print requests
         oldRValue <- readIORef r
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
@@ -165,7 +161,6 @@ step verbose threadCount graph delta buckets distances = do
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
-  print "heavy request"
   requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances       -- find heavy requests
   relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
   writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
@@ -225,7 +220,6 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
-
   let list = Set.toList v'
   m <- newMVar Map.empty
   forkThreads threadCount (findRequests' threadCount p graph list distances m)
@@ -257,21 +251,10 @@ findRequests' threadCount p graph v' distances intmap threadID = do
 findRequests'' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
 findRequests'' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
 
-  -- first get the edges of all the nodes that are in the bucket
-  
-  let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
-  print "EDGES"
-  print edges
-  -- then create the intmap with the new node as key and a distance as value
-  listForIntMap <- mapM (calculateNewRequestDistance distances) edges
-  return $ Map.fromList listForIntMap
 
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
 calculateNewRequestDistance distances (node1, node2, distance) = do
   tentDistance <- M.read distances node1
-  print "tentativeDistance"
-  print tentDistance
-  print distance
   return (node2, distance + tentDistance)
 
 
@@ -286,11 +269,7 @@ relaxRequests
     -> IO ()
 relaxRequests threadCount buckets distances delta req = do
   let doRelax = relax buckets distances delta
-  let yay = Map.toList req
-  mapM_ doRelax yay
-
-  print "end relax requests"
-  return ()
+  mapM_ doRelax (Map.toList req)
 
 
 -- Execute a single relaxation, moving the given node to the appropriate bucket
@@ -308,15 +287,17 @@ relax buckets distances delta (node, newDistance) = do
   -- print distance
   when (newDistance < distance) $ do
     let bucketArray' = bucketArray buckets
+    let bucketCount = V.length bucketArray'
+    let indexModulated = mod (floor (newDistance / delta)) bucketCount
 
     -- not sure if these are rounded correctly
     -- not sure how this would work with cyclic buckets
 
-    bucketToRemoveFrom <- V.readMaybe bucketArray' (floor (distance / delta))
+    bucketToRemoveFrom <- V.readMaybe bucketArray' indexModulated
     when (isJust bucketToRemoveFrom) $ do
-      V.modify bucketArray' (Set.delete node) (floor (distance / delta))
+      V.modify bucketArray' (Set.delete node) indexModulated
 
-    V.modify bucketArray' (Set.insert node) (floor (newDistance / delta))
+    V.modify bucketArray' (Set.insert node) indexModulated
     M.write distances node newDistance
     -- print "end relax"
 
