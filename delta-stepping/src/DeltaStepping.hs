@@ -96,14 +96,16 @@ deltaStepping verbose graph delta source = do
   -- NOTE: The function 'Data.Vector.convert' can be used to translate between
   -- different (compatible) vector types (e.g. boxed to storable)
   --
-  let vectorLenght = V.length distances
+  let vectorLenght = M.length distances
   newDistances <- M.generateM vectorLenght (transform' distances)
   M.unsafeFreeze newDistances
-  where
-    transform' :: TentativeDistances -> Int -> IO (Float)
+  --M.unsafeFreeze distances
+  where 
+    transform' :: TentativeDistances -> Int -> IO (Distance)
     transform' distances index = do
-      mvar <- V.read distances index
-      readMVar mvar
+      mvar <- M.read distances index
+      value <- readMVar mvar
+      return (value)
 
 
 -- Initialise algorithm state
@@ -116,9 +118,9 @@ initialise
 initialise graph delta source = do
   -- print "-------------------------------------------THIS IS A NEW GRAPH---------------------------------------------------------"
   bucketIndex <- newIORef 0
-  arrayOfBuckets <- V.replicateM (amountOfBuckets (G.labEdges graph) delta) (newIORef Set.empty)
+  arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
-  distances <- V.replicateM (length (G.nodes graph)) (newMVar infinity)
+  distances <- M.replicateM (length (G.nodes graph)) (newMVar infinity)
   relax buckets distances delta (source, 0)
   return (buckets, distances)
 
@@ -165,7 +167,6 @@ step verbose threadCount graph delta buckets distances = do
         writeIORef r (Set.union oldRValue set)
         emptyCurrentBucket buckets                                               --empty current bucket
         relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
-        printVerbose verbose "outer step" graph delta buckets distances
         loop2
   loop2                                                                   -- END WHILE LOOP 1
   rValue <- readIORef r
@@ -191,27 +192,21 @@ getCurrentBucket (Buckets firstBucket bucketArray) = do
   index <- readIORef firstBucket
   let bucketCount = V.length bucketArray
   let indexModulated = mod index bucketCount
-  ioref <- V.read bucketArray indexModulated
-  readIORef ioref
+  V.read bucketArray indexModulated
 
 emptyCurrentBucket :: Buckets -> IO()
 emptyCurrentBucket (Buckets firstBucket bucketArray) = do
   index <- readIORef firstBucket
   let bucketCount = V.length bucketArray
   let indexModulated = mod index bucketCount
-  ioref <- V.read bucketArray indexModulated
-  writeIORef ioref Set.empty
+  V.write bucketArray indexModulated Set.empty
 
 -- Once all buckets are empty, the tentative distances are finalised and the
 -- algorithm terminates.
 --
 allBucketsEmpty :: Buckets -> IO Bool
 allBucketsEmpty (Buckets _ buckets) = do
-  V.foldM f True (buckets)
-  where 
-    f x z = do 
-      y <- readIORef z
-      return  (x && Set.null y)
+  V.foldl (\x y -> x && Set.null y) True buckets
 
 -- Return the index of the smallest on-empty boucket. Assumes that there is at
 -- least one non-empty bucket remaining.
@@ -248,7 +243,7 @@ findRequests threadCount p graph v' distances = do
 
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
 calculateNewRequestDistance distances (node1, node2, distance) = do
-  tentDistance <- V.read distances node1
+  tentDistance <- M.read distances node1
   newDistance <- readMVar tentDistance
   return (node2, distance + newDistance)
 
@@ -265,10 +260,8 @@ relaxRequests
     -> IntMap Distance
     -> IO ()
 relaxRequests threadCount buckets distances delta req = do
-  --print "We got here"
   let doRelax = relax buckets distances delta
   let yay = Map.toList req
-  print (show (length yay))
   forkThreads threadCount (doConcurrentRelax threadCount doRelax yay)
   return ()
 
@@ -295,13 +288,15 @@ relax :: Buckets
       -> (Node, Distance) -- (w, x) in the paper
       -> IO ()
 relax buckets distances delta (node, newDistance) = do
-  mvar <- V.read distances node
+  -- print "start relax"
+  mvar <- M.read distances node
   distance <- takeMVar mvar
   -- print "relax distance"
   -- print distance
   if (newDistance < distance) then f mvar
-  else
+  else 
     putMVar mvar distance
+    -- print "end relax"
   where
   f mvar = do
     putMVar mvar newDistance
@@ -312,12 +307,11 @@ relax buckets distances delta (node, newDistance) = do
     -- not sure if these are rounded correctly
     -- not sure how this would work with cyclic buckets
 
-    ioref <- V.read bucketArray' indexModulated
-    _ <- atomicModifyIORef ioref x
-    return ()
-    where
-      x a = ( Set.insert node a, False)
+    bucketToRemoveFrom <- V.readMaybe bucketArray' indexModulated
+    when (isJust bucketToRemoveFrom) $ do
+      V.modify bucketArray' (Set.delete node) indexModulated
 
+    V.modify bucketArray' (Set.insert node) indexModulated
   -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
 
 
@@ -329,11 +323,11 @@ relax buckets distances delta (node, newDistance) = do
 -- You are free to change these as necessary.
 --
 
-type TentativeDistances = V.IOVector (MVar Distance)
+type TentativeDistances = (M.IOVector ( MVar Distance ))
 
 data Buckets = Buckets
   { firstBucket   :: {-# UNPACK #-} !(IORef Int)           -- real index of the first bucket (j)
-  , bucketArray   :: {-# UNPACK #-} !(V.IOVector (IORef IntSet))   -- cyclic array of buckets
+  , bucketArray   :: {-# UNPACK #-} !(V.IOVector IntSet)   -- cyclic array of buckets
   }
 
 
@@ -387,8 +381,7 @@ printCurrentState graph distances = do
   printf "  Node  |  Label  |  Distance\n"
   printf "--------+---------+------------\n"
   forM_ (G.labNodes graph) $ \(v, l) -> do
-    y <- V.read distances v
-    x <- readMVar y
+    x <- M.read distances v
     if isInfinite x
        then printf "  %4d  |  %5v  |  -\n" v l
        else printf "  %4d  |  %5v  |  %f\n" v l x
@@ -407,8 +400,7 @@ printBuckets graph delta Buckets{..} distances = do
     (\idx -> do
       let idx' = first + idx
       printf "Bucket %d: [%f, %f)\n" idx' (fromIntegral idx' * delta) ((fromIntegral idx'+1) * delta)
-      mvar <- V.read bucketArray (idx' `rem` V.length bucketArray)
-      b <- readIORef mvar
+      b <- V.read bucketArray (idx' `rem` V.length bucketArray)
       printBucket graph b distances
     )
     [ 0 .. V.length bucketArray - 1 ]
@@ -423,9 +415,8 @@ printCurrentBucket
     -> IO ()
 printCurrentBucket graph delta Buckets{..} distances = do
   j <- readIORef firstBucket
-  mvar <- V.read bucketArray (j `rem` V.length bucketArray)
+  b <- V.read bucketArray (j `rem` V.length bucketArray)
   printf "Bucket %d: [%f, %f)\n" j (fromIntegral j * delta) (fromIntegral (j+1) * delta)
-  b <- readIORef mvar
   printBucket graph b distances
 
 -- Print a given bucket
@@ -440,8 +431,7 @@ printBucket graph bucket distances = do
   printf "--------+---------+-----------\n"
   forM_ (Set.toAscList bucket) $ \v -> do
     let ml = G.lab graph v
-    y <- V.read distances v
-    x <- readMVar y
+    x <- M.read distances v
     case ml of
       Nothing -> printf "  %4d  |   -   |  %f\n" v x
       Just l  -> printf "  %4d  |  %5v  |  %f\n" v l x
