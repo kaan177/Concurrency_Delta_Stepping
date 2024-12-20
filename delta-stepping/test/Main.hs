@@ -73,7 +73,7 @@ propArbitrary graph delta = property $ do
 testSssp :: Graph -> Distance -> Node -> [Node] -> PropertyT IO ()
 testSssp graph delta src dst = do
   withFrozenCallStack $ ghciSuggestion graph delta src
-  sp  <- evalIO $ deltaStepping False graph delta src
+  sp  <- evalIO $ deltaStepping True graph delta src
   let actual   = map (\d -> let x = sp V.! d in if isInfinite x then Nothing else Just x) dst
       expected = map (\d -> G.spLength src d graph) dst
   actual ~~~ expected
