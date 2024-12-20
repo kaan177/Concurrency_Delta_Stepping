@@ -29,16 +29,16 @@ import Data.Graph.Inductive                                         ( Gr )
 import Data.IORef
 import Data.IntMap.Strict                                           ( IntMap )
 import Data.IntSet                                                  ( IntSet)
-import Data.Vector.Storable                                         ( Vector, fromList )
+import Data.Vector.Storable                                         ( Vector )
 import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 import Text.Printf
 import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map
-import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union, toList)
+import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, union, toList)
 import qualified Data.Vector.Mutable                                as V
-import qualified Data.Vector.Storable                               as M ( unsafeFreeze, empty )
+import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
 import qualified Data.Vector.Storable.Mutable                       as M
 import Data.Fixed (mod', div')
 import Data.Maybe
@@ -107,15 +107,16 @@ initialise
     -> Node
     -> IO (Buckets, TentativeDistances)
 initialise graph delta source = do
-  -- print "-------------------------------------------THIS IS A NEW GRAPH---------------------------------------------------------"
+  -- Making the buckets.
   bucketIndex <- newIORef 0
   arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
+  -- Making the tentative distances.
   distances <- M.replicate (length (G.nodes graph)) infinity
   relax buckets distances delta (source, 0)
   return (buckets, distances)
 
-
+--The amount of buckets is equal to the highest edge in the graph divided by delta.
 amountOfBuckets :: [G.LEdge Float] -> Float -> Int
 amountOfBuckets edges delta = ceiling (findLargestEdge edges / delta)
 
@@ -143,27 +144,28 @@ step verbose threadCount graph delta buckets distances = do
   -- For debugging purposes, you may want to place:
   --   printVerbose verbose "inner step" graph delta buckets distances
   -- in the inner loop.
-  nextBucket <- findNextBucket buckets
-  r <- newIORef Set.empty                                                      --empty set of nodes
-  let                                                                   -- WHILE LOOP 2
+  
+  visitedNodes <- newIORef Set.empty                                                     
+  let                                                                                      -- WHILE LOOP 1
     loop2 = do
-      done <- currentBucketIsEmpty buckets  --while bucket is not empty
+      done <- isCurrentBucketIsEmpty buckets                                                 --while bucket is not empty
       if done
       then return ()
       else do
         printVerbose verbose "inner step" graph delta buckets distances
-        set <- getCurrentBucket buckets
-        requests <- findRequests threadCount (isLightEdge delta) graph set distances       --find light requests
-        oldRValue <- readIORef r
-        writeIORef r (Set.union oldRValue set)
-        emptyCurrentBucket buckets                                               --empty current bucket
-        relaxRequests threadCount buckets distances delta requests               --handle all the requests /put back items in the bucket
+        set <- getCurrentBucket buckets                                                    
+        requests <- findRequests threadCount (isLightEdge delta) graph set distances        --find light requests
+        oldRValue <- readIORef visitedNodes
+        writeIORef visitedNodes (Set.union oldRValue set)                                   --remember all the nodes that have been visited for heavy requests
+        emptyCurrentBucket buckets                                                          --empty current bucket
+        relaxRequests threadCount buckets distances delta requests                          --handle all the requests /put back items in the bucket
         loop2
-  loop2                                                                   -- END WHILE LOOP 1
-  rValue <- readIORef r
-  requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances       -- find heavy requests
-  relaxRequests threadCount buckets distances delta requests               -- relax heavy requests
-  writeIORef (firstBucket buckets) nextBucket                            --Next empty bucket
+  loop2                                                                                     -- END WHILE LOOP 1
+  rValue <- readIORef visitedNodes
+  requests <- findRequests threadCount (isHeavyEdge delta) graph rValue distances           -- find heavy requests
+  relaxRequests threadCount buckets distances delta requests                                -- relax heavy requests
+  nextBucket <- findNextBucket buckets                                                      --find next empty bucket
+  writeIORef (firstBucket buckets) nextBucket                                               --Set next empty bucket
 
 
 isLightEdge ::Distance -> (Distance -> Bool)
@@ -173,8 +175,8 @@ isHeavyEdge ::Distance -> (Distance -> Bool)
 isHeavyEdge delta distance = distance > delta
 
 
-currentBucketIsEmpty :: Buckets -> IO Bool
-currentBucketIsEmpty b = do
+isCurrentBucketIsEmpty :: Buckets -> IO Bool
+isCurrentBucketIsEmpty b = do
   set <- getCurrentBucket b
   return (Set.null set)
 
@@ -221,7 +223,7 @@ findRequests
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
   let list = Set.toList v'
-  -- this is an MVar that we the IntMap will be put into
+  -- this is an MVar that the IntMap will be put into
   out <- newMVar Map.empty
   forkThreads threadCount (requestsWork threadCount p graph list distances out)
   takeMVar out
@@ -284,25 +286,22 @@ relax :: Buckets
       -> (Node, Distance) -- (w, x) in the paper
       -> IO ()
 relax buckets distances delta (node, newDistance) = do
-  -- print "start relax"
   distance <- M.read distances node
-  -- print "relax distance"
-  -- print distance
+  
   when (newDistance < distance) $ do
+    --Get the bucket to put the node in.
     let bucketArray' = bucketArray buckets
     let bucketCount = V.length bucketArray'
     let indexModulated = mod (floor (newDistance / delta)) bucketCount
-
-    -- not sure if these are rounded correctly
-    -- not sure how this would work with cyclic buckets
-
+    
+    --Remove the node from the current bucket
     bucketToRemoveFrom <- V.readMaybe bucketArray' indexModulated
     when (isJust bucketToRemoveFrom) $ do
       V.modify bucketArray' (Set.delete node) indexModulated
 
+    --Add the node to correct bucket.
     V.modify bucketArray' (Set.insert node) indexModulated
     M.write distances node newDistance
-    -- print "end relax"
 
   -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
 
