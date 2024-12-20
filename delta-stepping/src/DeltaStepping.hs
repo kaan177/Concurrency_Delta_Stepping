@@ -96,7 +96,17 @@ deltaStepping verbose graph delta source = do
   -- NOTE: The function 'Data.Vector.convert' can be used to translate between
   -- different (compatible) vector types (e.g. boxed to storable)
   --
-  M.unsafeFreeze distances
+  let vectorLenght = M.length distances
+  newDistances <- M.generateM vectorLenght (transform' distances)
+  M.unsafeFreeze newDistances
+  --M.unsafeFreeze distances
+  where 
+    transform' :: TentativeDistances -> Int -> IO (Distance)
+    transform' distances index = do
+      mvar <- M.read distances index
+      value <- readMVar mvar
+      return (value)
+
 
 -- Initialise algorithm state
 --
@@ -110,7 +120,7 @@ initialise graph delta source = do
   bucketIndex <- newIORef 0
   arrayOfBuckets <- V.replicate (amountOfBuckets (G.labEdges graph) delta) Set.empty
   let buckets = Buckets bucketIndex arrayOfBuckets
-  distances <- M.replicate (length (G.nodes graph)) infinity
+  distances <- M.replicateM (length (G.nodes graph)) (newMVar infinity)
   relax buckets distances delta (source, 0)
   return (buckets, distances)
 
@@ -234,7 +244,8 @@ findRequests threadCount p graph v' distances = do
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
 calculateNewRequestDistance distances (node1, node2, distance) = do
   tentDistance <- M.read distances node1
-  return (node2, distance + tentDistance)
+  newDistance <- readMVar tentDistance
+  return (node2, distance + newDistance)
 
 findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
 findRequests' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
@@ -251,10 +262,7 @@ relaxRequests
 relaxRequests threadCount buckets distances delta req = do
   let doRelax = relax buckets distances delta
   let yay = Map.toList req
-
   forkThreads threadCount (doConcurrentRelax threadCount doRelax yay)
-
-  print "end relax requests"
   return ()
 
 doConcurrentRelax ::  Int -> ((Node, Distance) -> IO ()) -> [(Node, Distance)] -> Int -> IO ()
@@ -281,10 +289,17 @@ relax :: Buckets
       -> IO ()
 relax buckets distances delta (node, newDistance) = do
   -- print "start relax"
-  distance <- M.read distances node
+  mvar <- M.read distances node
+  distance <- takeMVar mvar
   -- print "relax distance"
   -- print distance
-  when (newDistance < distance) $ do
+  if (newDistance < distance) then f mvar
+  else 
+    putMVar mvar distance
+    -- print "end relax"
+  where
+  f mvar = do
+    putMVar mvar newDistance
     let bucketArray' = bucketArray buckets
     let bucketCount = V.length bucketArray'
     let indexModulated = mod (floor (newDistance / delta)) bucketCount
@@ -297,9 +312,6 @@ relax buckets distances delta (node, newDistance) = do
       V.modify bucketArray' (Set.delete node) indexModulated
 
     V.modify bucketArray' (Set.insert node) indexModulated
-    M.write distances node newDistance
-    -- print "end relax"
-
   -- don't do anything if newDistance isn't smaller than the distance already assigned to the node.
 
 
@@ -311,7 +323,7 @@ relax buckets distances delta (node, newDistance) = do
 -- You are free to change these as necessary.
 --
 
-type TentativeDistances = M.IOVector Distance
+type TentativeDistances = (M.IOVector ( MVar Distance ))
 
 data Buckets = Buckets
   { firstBucket   :: {-# UNPACK #-} !(IORef Int)           -- real index of the first bucket (j)
