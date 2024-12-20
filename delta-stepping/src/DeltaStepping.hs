@@ -38,10 +38,13 @@ import qualified Data.Graph.Inductive                               as G
 import qualified Data.IntMap.Strict                                 as Map 
 import qualified Data.IntSet                                        as Set (empty, null, toAscList, delete, insert, map, filter, union, toList)
 import qualified Data.Vector.Mutable                                as V
-import qualified Data.Vector.Storable                               as M ( unsafeFreeze )
+import qualified Data.Vector.Storable                               as M ( unsafeFreeze, empty )
 import qualified Data.Vector.Storable.Mutable                       as M
 import Data.Fixed (mod', div')
 import Data.Maybe
+import Data.Ord (comparing)
+import Data.List
+import Data.Sequence (chunksOf)
 
 
 type Graph    = Gr String Distance  -- Graphs have nodes labelled with Strings and edges labelled with their distance
@@ -222,6 +225,38 @@ findRequests
     -> TentativeDistances
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
+
+  let list = Set.toList v'
+  m <- newMVar Map.empty
+  forkThreads threadCount (findRequests' threadCount p graph list distances m)
+  takeMVar m
+
+splitList :: Int -> Int -> [a] -> [a]
+splitList threadID threadCount list = [x | (x, num) <- zip list [0..], mod num threadCount == threadID]
+
+findRequests'
+    :: Int
+    -> (Distance -> Bool)
+    -> Graph
+    -> [Map.Key]
+    -> TentativeDistances
+    -> MVar (IntMap Distance)
+    -> Int
+    -> IO ()
+findRequests' threadCount p graph v' distances intmap threadID = do
+  -- first get the edges of all the nodes that are in the bucket
+  let edges =  concatMap (findRequests'' p graph) (splitList threadID threadCount v') -- Set.toList is probably not the best, but it works
+  -- then create the intmap with the new node as key and a distance as value
+  listForIntMap <- mapM (calculateNewRequestDistance distances) edges
+  -- we use insertWith here becuase, duplicate keys can happen
+  -- If this does happen, we need to only store the lowest value in this IntMap
+
+  a <- takeMVar intmap 
+  putMVar intmap $ foldl' (\intMap (key, val) -> Map.insertWith min key val intMap) a listForIntMap
+
+findRequests'' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
+findRequests'' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
+
   -- first get the edges of all the nodes that are in the bucket
   
   let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
@@ -239,8 +274,6 @@ calculateNewRequestDistance distances (node1, node2, distance) = do
   print distance
   return (node2, distance + tentDistance)
 
-findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
-findRequests' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
 
 -- Execute requests for each of the given (node, distance) pairs
 --
