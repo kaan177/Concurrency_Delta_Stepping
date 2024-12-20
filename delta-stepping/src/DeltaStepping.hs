@@ -239,8 +239,6 @@ findRequests threadCount p graph v' distances = do
   let edges =  concatMap (findRequests' p graph) (Set.toList v') -- Set.toList is probably not the best, but it works
   -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
-  -- we use insertWith here becuase, duplicate keys can happen
-  -- If this does happen, we need to only store the lowest value in this IntMap
   return $ foldl' (\intMap (key, val) -> Map.insertWith min key val intMap) Map.empty listForIntMap
   -- return $ Map.fromList (sortBy (comparing snd) listForIntMap)
 
