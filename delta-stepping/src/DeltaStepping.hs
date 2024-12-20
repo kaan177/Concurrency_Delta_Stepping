@@ -221,14 +221,16 @@ findRequests
     -> IO (IntMap Distance)
 findRequests threadCount p graph v' distances = do
   let list = Set.toList v'
-  m <- newMVar Map.empty
-  forkThreads threadCount (findRequests' threadCount p graph list distances m)
-  takeMVar m
+  -- this is an MVar that we the IntMap will be put into
+  out <- newMVar Map.empty
+  forkThreads threadCount (requestsWork threadCount p graph list distances out)
+  takeMVar out
 
+-- This function is used to make sure that each thread gets the same chunk of the list
 splitList :: Int -> Int -> [a] -> [a]
 splitList threadID threadCount list = [x | (x, num) <- zip list [0..], mod num threadCount == threadID]
 
-findRequests'
+requestsWork
     :: Int
     -> (Distance -> Bool)
     -> Graph
@@ -237,19 +239,20 @@ findRequests'
     -> MVar (IntMap Distance)
     -> Int
     -> IO ()
-findRequests' threadCount p graph v' distances intmap threadID = do
+requestsWork threadCount p graph v' distances intmap threadID = do
   -- first get the edges of all the nodes that are in the bucket
-  let edges =  concatMap (findRequests'' p graph) (splitList threadID threadCount v') -- Set.toList is probably not the best, but it works
+  let edges =  concatMap (findRequests' p graph) (splitList threadID threadCount v')
   -- then create the intmap with the new node as key and a distance as value
   listForIntMap <- mapM (calculateNewRequestDistance distances) edges
-  -- we use insertWith here becuase, duplicate keys can happen
-  -- If this does happen, we need to only store the lowest value in this IntMap
-
   a <- takeMVar intmap 
+  -- here, we take the intmap so this thread can add its new values to the Intmap
+  -- we use insertWith to make sure that duplicate keys are handled correctly
+  -- Only the lowest value is needed
   putMVar intmap $ foldl' (\intMap (key, val) -> Map.insertWith min key val intMap) a listForIntMap
 
-findRequests'' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
-findRequests'' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
+-- get the requests
+findRequests' :: (Distance -> Bool) -> Graph -> Int -> [G.LEdge Distance]
+findRequests' p graph node = filter (\(_, _, node_cost) -> p node_cost) $ G.out graph node :: [G.LEdge Distance]
 
 
 calculateNewRequestDistance :: TentativeDistances -> G.LEdge Distance -> IO (Node, Distance)
